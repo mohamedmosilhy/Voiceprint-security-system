@@ -28,23 +28,44 @@ class PhraseModel:
         return data, sample_rate
 
     def train_speaker_recognition_model(self):
+        # Get a list of all speakers
         speakers = list(self.audio_data.keys())
+        
+        # Generate file paths for each speaker
         paths = [os.path.join(self.folder_path, speaker) for speaker in speakers]
 
+        # Extract features from audio data and train speaker recognition model
         aT.extract_features_and_train(
             paths, 1.0, 1.0, aT.shortTermWindow, aT.shortTermStep, "svm", "svmout", False)
 
     
     def get_prediction(self, audio_file_path):
-        _ , prob_arr, predicted_speakers = aT.file_classification(audio_file_path, "svmout", "svm")
+        """
+        Get the prediction for the speaker in an audio file.
+
+        Parameters:
+        - audio_file_path (str): The path to the audio file.
+
+        Returns:
+        - prob_arr (list): The probability array for each speaker.
+        - predicted_speaker (str): The predicted speaker.
+        """
+
+        # Get the classification results from the audio file
+        _, prob_arr, predicted_speakers = aT.file_classification(audio_file_path, "svmout", "svm")
+
+        # Convert the probability array to a list
         prob_arr = prob_arr.tolist()
 
+        # Find the maximum probability and its index in the array
         max_prob = max(prob_arr)
-
         index_max = prob_arr.index(max_prob)
 
+        # Get the predicted speaker based on the maximum probability
         predicted_speaker = predicted_speakers[index_max]
-        return prob_arr , predicted_speaker
+
+        # Return the probability array and the predicted speaker
+        return prob_arr, predicted_speaker
 
         
 # your_instance = AccessModel(folder_path='accessWords')
