@@ -47,7 +47,7 @@ class AccessModel:
         )
 
     
-    def get_prediction(self, audio_file_path):
+    def get_prediction(self, audio_file_path, model_file_path):
         """
         Get the prediction of the speaker from an audio file.
 
@@ -58,7 +58,7 @@ class AccessModel:
             tuple: A tuple containing the probability array and the predicted speaker.
         """
         # Perform file classification using the svmSMtemp model
-        _, prob_arr, predicted_speakers = aT.file_classification(audio_file_path, "svmSMtemp", "svm")
+        _, prob_arr, predicted_speakers = aT.file_classification(audio_file_path, model_file_path, "svm")
         
         # Convert the probability array to a list
         prob_arr = prob_arr.tolist()
