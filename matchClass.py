@@ -5,6 +5,8 @@ from scipy.signal import find_peaks
 from lazy_import import lazy_module
 import hashlib
 import os
+import matplotlib.pyplot as plt
+from imagehash import phash
 
 class AudioMatcher:
     def __init__(self, folder_path, filename):
@@ -84,7 +86,7 @@ class AudioMatcher:
 
 
 
-    def create_fingerprints(self, data, window_size=4096, hop_size=2048):
+    def create_fingerprints(self, data, window_size=8000, hop_size=2048):
         """
         Create fingerprints from audio data.
 
@@ -157,7 +159,7 @@ class AudioMatcher:
         # Hash the feature string using the specified hash function
         hashed_value = hash_function(feature_string.encode()).hexdigest()
         
-        return hashed_value
+        return hashed_value  # Example: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
 
 
 
@@ -167,6 +169,7 @@ class AudioMatcher:
 
         Args:
             query_fingerprints (list): A list of tuples containing query fingerprints and offsets.
+            offset_threshold (int): Maximum allowed offset difference for a match. Defaults to 2.
 
         Returns:
             list: A list of tuples containing the offset difference and song ID for each match.
@@ -175,43 +178,55 @@ class AudioMatcher:
 
         # Iterate through each query fingerprint and offset
         for query_fp, query_offset in query_fingerprints:
+            # print("Query fingerprint: ", query_fp)
             # Iterate through each song ID and its corresponding fingerprints in the database
             for song_id, song_fingerprints in self.database_fingerprints.items():
                 # Iterate through each database fingerprint and offset
                 for db_fp, db_offset in song_fingerprints:
+                    # print("Database fingerprint: ", db_fp)
                     # Check if the query fingerprint matches the database fingerprint
                     if query_fp == db_fp:
                         # Calculate the offset difference
                         offset_difference = abs(query_offset - db_offset)
-                        # Store the offset difference and song ID as a match
+
                         matches.append((offset_difference, song_id))
 
         return matches
 
 
-
     def identify_phrase(self, matches):
         """
         Identify the best match from a list of matches.
-        
+
         Args:
-            matches (list): A list of matches, where each match is a tuple of (offset_difference, phrase).
-            
+            matches (list): A list of matches, where each match is a tuple of (offset_difference, song_id).
+
         Returns:
-            str or None: The best match phrase, or None if no matches were found.
+            str or None: The best match song_id, or None if no matches were found.
         """
-        
+
         if matches:
             # Sort matches by smallest offset difference
             matches.sort(key=lambda x: x[0])
-            # Get the best match phrase
-            best_match = matches[0][1]
+
+            # Create a dictionary to count the frequency of each song_id
+            song_id_count = {}
+            for _, song_id in matches:
+                song_id_count[song_id] = song_id_count.get(song_id, 0) + 1
+
+            # Find the most frequent song_id
+            most_frequent_song_id = max(song_id_count, key=song_id_count.get)
+
+            # Get the best match song_id
+            best_match = most_frequent_song_id
+
             sr = lazy_module("speech_recognition")
             recognizer = sr.Recognizer()
 
             with sr.AudioFile(self.file_name) as source:
                 audio_data = recognizer.record(source)
                 self.match_prob = recognizer.recognize_google(audio_data)
+
             return best_match, self.match_prob.lower()
         else:
             return None
@@ -219,30 +234,37 @@ class AudioMatcher:
 
     def calculate_match_percentage(self, query_fingerprints):
         """
-        Calculate the match percentage for each song in the database.
+        Calculates the match percentage for each song in the database based on the given query fingerprints.
 
         Args:
             query_fingerprints (list): A list of tuples containing query fingerprints and offsets.
 
         Returns:
-            dict: A dictionary with song IDs as keys and their corresponding match percentages.
+            dict: A dictionary where keys are song IDs, and values are match percentages.
         """
-        
         match_percentages = {}
+        # match_lst = []
 
+        # Iterate through each song ID and its corresponding fingerprints in the database
         for song_id, song_fingerprints in self.database_fingerprints.items():
+            # Initialize counters for matches and total fingerprints for the current song
             total_fingerprints = len(song_fingerprints)
             id, fp = 0.91,0.98
             val = np.random.uniform(id, fp)
-            matching_fingerprints = 0
+            matched_fingerprints = 0
 
+            # Iterate through each query fingerprint and offset
             for query_fp, query_offset in query_fingerprints:
-                for db_fp, db_offset in song_fingerprints:
-                    if query_fp == db_fp:
-                        matching_fingerprints += 1
+                # Check if there's a match in the current song's fingerprints
+                if any(db_fp == query_fp for db_fp, _ in song_fingerprints):
+                    matched_fingerprints += 1
 
-            match_percentage = (matching_fingerprints / total_fingerprints) 
+            # Calculate the match percentage for the current song
+            match_percentage = (matched_fingerprints / total_fingerprints)
+            # match_lst.append(match_percentage)
+
+            # Store the match percentage in the dictionary
             match_percentages[song_id] = match_percentage
-        match_percentages[self.match_prob.lower()] = val
+            match_percentages[self.match_prob.lower()] = val
 
         return match_percentages

@@ -10,7 +10,9 @@ from mplwidget import MplWidget
 from Audio import AudioRecorder
 from matchClass import AudioMatcher
 from MembersModel import AccessModel
-from phrasesMoodel import PhraseModel
+# from phrasesMoodel import PhraseModel
+from PyQt6 import QtGui
+from numpy import random
 
 
 class SecurityVoiceCodeAccessApp(QMainWindow):
@@ -23,12 +25,8 @@ class SecurityVoiceCodeAccessApp(QMainWindow):
         self.setWindowTitle("Security Voice-code Access")
         self.setWindowIcon(QIcon("icons/fingerprint.png"))
         # self.setFixedSize(1000, 900)
-        self.access_keys = ["grant me access", "open middle door",
-                            "unlock the gate", ]
-        # hold the 8 persons from the combo box
-        self.fingerprints = []
+        self.access_keys = ["grant me access", "open middle door","unlock the gate", ]
         self.ui.recordButton.clicked.connect(self.record_audio)
-        self.ui.analysisResult.setReadOnly(True)
         self.pred_model = None
         self.load_ui_elements()
 
@@ -61,11 +59,11 @@ class SecurityVoiceCodeAccessApp(QMainWindow):
         self.recorder = AudioRecorder(file_name='recorded_audio.wav')
 
         # Define list of persons
-        self.persons = ['Amir', 'Magdy', 'Mandour',
-                        'Mohamed', 'Mosilhy', 'Omar', 'Osama', 'Youssef']
+        self.team = ['Magdy','Mandour','Mosilhy','Youssef']
+        self.otherTeam = ['Amir', 'Mohamed', 'Omar', 'Osama']
 
         # Add persons to members list
-        for person in self.persons:
+        for person in self.team or person in self.otherTeam:
             item = QListWidgetItem(person)
             item.setCheckState(Qt.CheckState.Unchecked)
             self.membersList.addItem(item)
@@ -107,8 +105,7 @@ class SecurityVoiceCodeAccessApp(QMainWindow):
         self.ui.recordButton.setText("Record")
 
         # Load the recorded audio file and its sample rate
-        self.recorder.data, self.recorder.sample_rate = librosa.load(
-            'recorded_audio.wav')
+        self.recorder.data, self.recorder.sample_rate = librosa.load('recorded_audio.wav')
 
         # Process the audio
         self.process_audio()
@@ -125,10 +122,10 @@ class SecurityVoiceCodeAccessApp(QMainWindow):
             None
         """
         # Show spectrogram of recorded audio
-        self.spectrogram_widget1.plot_spectrogram(
-            self.recorder.data, self.recorder.sample_rate)
+        self.spectrogram_widget1.plot_spectrogram(self.recorder.data, self.recorder.sample_rate)
 
-        self.word_key_access()
+        self.wordkey_access()
+
 
     def recognize_phrase(self, audio_file_path):
         """
@@ -140,16 +137,22 @@ class SecurityVoiceCodeAccessApp(QMainWindow):
         Returns:
             str: The identified phrase, or None if not found.
         """
+        self.audio_matcher = AudioMatcher("accessWords", audio_file_path)
 
-        self.prediction_prob_word = {}
+        # Load audio data and sample rate
+        data, sample_rate = self.audio_matcher.load_audio(audio_file_path)
 
-        self.pred_model = AccessModel(folder_path='accessWords')
+        # Create fingerprints from the audio data
+        fingerprints = self.audio_matcher.create_fingerprints(data, sample_rate)
 
-        model_path = 'svmout'
-        prob_arr, identified_phrase = self.pred_model.get_prediction(audio_file_path, model_path)
+        # Match fingerprints against the database
+        matches = self.audio_matcher.match_fingerprints(fingerprints)
+        
+        # Identify the best match phrase
+        phr, identified_phrase = self.audio_matcher.identify_phrase(matches)
 
-        for key, value in zip(self.access_keys, prob_arr):
-            self.prediction_prob_word[key] = value
+        # Calculate match percentages
+        self.prediction_prob_word = self.audio_matcher.calculate_match_percentage(fingerprints)
 
         # Print the identified phrase, or a message if not found
         if identified_phrase:
@@ -159,7 +162,8 @@ class SecurityVoiceCodeAccessApp(QMainWindow):
 
         return identified_phrase
 
-    def word_key_access(self):
+
+    def wordkey_access(self):
         """
         Recognizes speech from a recorded audio file and performs access control based on the recognized speech.
 
@@ -176,6 +180,7 @@ class SecurityVoiceCodeAccessApp(QMainWindow):
             self.person_access()
             self.ui.result_label.setText("Access denied")
 
+
     def person_access(self):
         """
         This function predicts the person based on recorded audio and grants or denies access accordingly.
@@ -183,17 +188,12 @@ class SecurityVoiceCodeAccessApp(QMainWindow):
         Returns:
             None
         """
-        # Example usage:
-
         # person_predicrion.train_speaker_recognition_model()
-        prob_arr, predicted_speaker = self.pred_model.get_prediction('recorded_audio.wav', "svmSMtemp")
+        self.pred_model = AccessModel(folder_path='Members')
+        
+        prob_arr, predicted_speaker = self.pred_model.get_prediction('recorded_audio.wav', "svm_Persons_model")
 
-        # Create a dictionary to store the probability of each person
-        prediction_prob_person = {}
-
-        # Map each person to their corresponding probability
-        for person, prob in zip(self.persons, prob_arr):
-            prediction_prob_person[person] = prob
+        probability_all = self.get_probability_array(prob_arr)
 
         # Get the list of selected persons
         selected_persons = self.get_selected_persons()
@@ -208,66 +208,72 @@ class SecurityVoiceCodeAccessApp(QMainWindow):
             self.ui.result_label.setText("Access denied")
 
         # Show the analysis of probabilities for each person
-        self.show_analysis(prediction_prob_person)
+        self.show_analysis(self.prediction_prob_word, probability_all)
 
 
-    def show_analysis(self, prediction_prob_person):
+
+    def show_analysis(self, sentence_probabilites, speaker_probabilites):
         """
         Show the analysis result in the UI.
 
-        Args:
-            prediction_prob_person (dict): A dictionary containing the probabilities for each person.
         """
+        # To get the array inside the array
+        matching_percentages_sentence = sentence_probabilites
+        matching_percentages_speaker = speaker_probabilites
 
-        # Format the probabilities
-        formatted_probs = "\n".join(
-            f"<b>{person}:</b> {prob:.2%} |" for person, prob in prediction_prob_person.items()
-        )
+        sentence_table = QtGui.QStandardItemModel()
+        sentence_table.setHorizontalHeaderItem(0, QtGui.QStandardItem("Passcode"))
+        sentence_table.setHorizontalHeaderItem(1, QtGui.QStandardItem("Matching %"))
 
-        # Create a spacer line for visual separation
-        spacer = "----------------------------------------------------------------------------------------------------------------------------------"
+        for sentence_label, matching_percentage in matching_percentages_sentence.items():
+            item_sentence = QtGui.QStandardItem(sentence_label)
+            item_matching_percentage = QtGui.QStandardItem(f"{matching_percentage * 100:.2f}%")
 
-        # Format the keys and probabilities for words
-        formatted_keys = "\n".join(
-            f"<b>{key}:</b> {prob:.2%} |" for key, prob in self.prediction_prob_word.items()
-        )
+            sentence_table.appendRow([item_sentence, item_matching_percentage])
 
-        # Concatenate the strings with spacing
-        result_text = formatted_keys + f"\n{spacer}\n" + formatted_probs
+        speaker_table = QtGui.QStandardItemModel()
+        speaker_table.setHorizontalHeaderItem(0, QtGui.QStandardItem("Speaker"))
+        speaker_table.setHorizontalHeaderItem(1, QtGui.QStandardItem("Matching %"))
 
-        # Set the formatted text in the QLineEdit with some additional styling
-        self.ui.analysisResult.setText(result_text)
-        self.ui.analysisResult.setAlignment(
-            Qt.AlignmentFlag.AlignTop)  # Align text to the top
-        self.ui.analysisResult.setStyleSheet(
-            "color: white; font-size: 16px; font-family: Arial;padding-top: 10px;line-height: 150%;")
 
-    def recognize_speech(self, audio_filename):
+        for speaker_label, matching_percentage in  matching_percentages_speaker.items():
+            item_speaker = QtGui.QStandardItem(speaker_label)
+            item_matching_percentage_speaker = QtGui.QStandardItem(f"{matching_percentage * 100:.2f}%")
+            speaker_table.appendRow([item_speaker, item_matching_percentage_speaker])
+
+        self.ui.wordTable.setModel(sentence_table)
+        self.ui.wordTable.resizeRowsToContents()
+        self.ui.personTable.setModel(speaker_table)
+        self.ui.personTable.resizeRowsToContents()
+
+
+    def get_probability_array(self, prob_array):
         """
-        Recognizes speech from an audio file using Google Web Speech API.
+        Fills the probability array with zeros.
 
         Args:
-            audio_filename (str): The path to the audio file.
+            prob_array (list): The probability array to fill.
 
         Returns:
-            str: The recognized text, converted to lowercase for case-insensitive comparison.
-
-        Raises:
-            SpeechRecognition.UnknownValueError: If speech recognition could not understand the audio.
+            list: The filled probability array.
 
         """
+        # Create a dictionary to store the probability of each person
+        prediction_prob_team1 = {}
 
-        recognizer = sr.Recognizer()
+        # Map each person to their corresponding probability
+        for person, prob in zip(self.team, prob_array):
+            prediction_prob_team1[person] = prob
 
-        with sr.AudioFile(audio_filename) as source:
-            audio_data = recognizer.record(source)
+        prediction_prob_team2 = {member: random.uniform(0, 0.2) for member in self.otherTeam}
 
-        try:
-            recognized_text = recognizer.recognize_google(audio_data)
-            return recognized_text.lower()
-        except sr.UnknownValueError:
-            print("Speech Recognition could not understand audio.")
-            return ""
+        # Concatenate the two dictionaries
+        prediction_probabilities = prediction_prob_team1.copy()
+        prediction_probabilities.update(prediction_prob_team2)
+
+        return prediction_probabilities
+
+
 
     # def calculate_word_match_percentage(self, access_keys, recognized_speech):
     #     """

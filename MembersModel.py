@@ -42,7 +42,7 @@ class AccessModel:
             aT.shortTermWindow,  # Short-term window size for feature extraction
             aT.shortTermStep,    # Short-term step size for feature extraction
             "svm",  # Model type
-            "svmSMtemp",  # Model file path
+            "svm_Persons_model",  # Model file path
             False   # Flag to disable training visualization
         )
 
@@ -76,7 +76,7 @@ class AccessModel:
         return prob_arr, predicted_speaker
 
 
-# your_instance = AccessModel(folder_path='Members')
+# your_instance = AccessModel(folder_path='Members2')
 
 # your_instance.train_speaker_recognition_model()
 
