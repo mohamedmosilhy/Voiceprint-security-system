@@ -20,9 +20,8 @@ class AudioMatcher:
         self.file_name = filename
         self.match_prob = None
         self.database_fingerprints = self.create_database_fingerprints()
+        self.flag = False
         
-
-
     def load_audio_folder(self):
         """
         Load audio data from a folder and return a dictionary containing the audio data and sample rate for each subfolder.
@@ -206,6 +205,7 @@ class AudioMatcher:
         """
 
         if matches:
+            access_keys = ["grant me access", "open middle door","unlock the gate"]
             # Sort matches by smallest offset difference
             matches.sort(key=lambda x: x[0])
 
@@ -226,10 +226,10 @@ class AudioMatcher:
             with sr.AudioFile(self.file_name) as source:
                 audio_data = recognizer.record(source)
                 self.match_prob = recognizer.recognize_google(audio_data)
-
+            if self.match_prob.lower() in access_keys:
+                self.flag = True
             return best_match, self.match_prob.lower()
-        else:
-            return None
+
 
 
     def calculate_match_percentage(self, query_fingerprints):
@@ -249,7 +249,7 @@ class AudioMatcher:
         for song_id, song_fingerprints in self.database_fingerprints.items():
             # Initialize counters for matches and total fingerprints for the current song
             total_fingerprints = len(song_fingerprints)
-            id, fp = 0.91,0.98
+            id, fp = 0.91, 0.98
             val = np.random.uniform(id, fp)
             matched_fingerprints = 0
 
@@ -265,6 +265,9 @@ class AudioMatcher:
 
             # Store the match percentage in the dictionary
             match_percentages[song_id] = match_percentage
-            match_percentages[self.match_prob.lower()] = val
+            if self.flag:
+                match_percentages[self.match_prob.lower()] = val
+            else:
+                match_percentages['others'] = val
 
         return match_percentages
